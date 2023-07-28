@@ -48,7 +48,7 @@ object ScadaDemoSpark {
       Map("kudu.master" -> kuduMaster, "kudu.table" -> kuduTableStr))
       .load().where("state in (7, 8, 1, 9, 20, 17,0,26) " +
       " and (substring(crystalid,2,2) in " +
-      "('GN', 'GP','NN', 'NP','TN', 'TP','BN', 'BP','EN', 'EP','LN', 'LP','HN', 'HP','YN', 'YP','QN', 'QP') or substring (basearea, 4, 1) in ('E', 'D', 'F'))" +
+      "('GN', 'GP','NN', 'NP','TN', 'TP','BN', 'BP','EN', 'EP','LN', 'LP','HN', 'HP','YN', 'YP','QN', 'QP') )" +
       " and length(crystalid)=10 and  crystallength > 0")
 
     dj_DF.createTempView("dj_df")
@@ -154,8 +154,6 @@ object ScadaDemoSpark {
         |             'HN', 'HP',
         |             'YN', 'YP',
         |             'QN', 'QP')
-        |             or
-        |             substring (basearea, 4, 1) in ('E', 'D', 'F')
         |             )
         |
         |             ) ALAYER where state = 8
