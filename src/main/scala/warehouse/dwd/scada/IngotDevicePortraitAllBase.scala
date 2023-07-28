@@ -4,21 +4,21 @@ import org.apache.spark.sql.SparkSession
 
 object IngotDevicePortraitAllBase {
   def main(args: Array[String]): Unit = {
-     //北郊集群
-//        val kuduMaster = "worker01.center.longi:7051,worker03.center.longi:7051,worker05.center.longi:7051"
+    //北郊集群
+    //        val kuduMaster = "worker01.center.longi:7051,worker03.center.longi:7051,worker05.center.longi:7051"
     // 南郊集群worker01.longi:7051,worker02.longi:7051,worker03.longi:7051
     //    val kuduMaster = "worker01.longi:7051,worker02.longi:7051,worker03.longi:7051"
     // 定义表名称
-//     val djzkResModel = "ods_ingot_scada.streaming_djzk_app_result"
+    //     val djzkResModel = "ods_ingot_scada.streaming_djzk_app_result"
     val djzkResModel = "ods_ingot_scada.djzk_app_result"
 
-//    System.setProperty("user.name", "mafq")
-//    System.setProperty("HADOOP_USER_NAME", "mafq")
+    //    System.setProperty("user.name", "mafq")
+    //    System.setProperty("HADOOP_USER_NAME", "mafq")
     // 1. 初始化kudu-saprk
     val spark = SparkSession
       .builder()
       .appName("IngotDevicePortrait")
-//      .master("local[*]")
+      //      .master("local[*]")
       .config("hive.exec.dynamic.partition", true)
       .config("spark.sql.parquet.writeLegacyFormat", true)
       .config("spark.sql.sources.partitionOverwriteMode", "dynamic")
@@ -32,13 +32,13 @@ object IngotDevicePortraitAllBase {
     import spark.implicits._
     val daysbefore = args(0)
     val curday = args(1)
-//    val daysbefore = "2023-01-01"
-//    val curday = "2023-01-07"
+    //    val daysbefore = "2023-01-01"
+    //    val curday = "2023-01-07"
 
     // 2.读取kudu表数据
-//        spark.read.format("kudu").options(
-//          Map("kudu.master"->kuduMaster, "kudu.table"->djzkResModel)
-//        ).load().createOrReplaceTempView("streaming_djzk_app_result")
+    //        spark.read.format("kudu").options(
+    //          Map("kudu.master"->kuduMaster, "kudu.table"->djzkResModel)
+    //        ).load().createOrReplaceTempView("streaming_djzk_app_result")
 
     val ods_table = spark.sql(
       s"""
@@ -92,7 +92,7 @@ object IngotDevicePortraitAllBase {
          |   and mod(cast(substring (nowtime, 18, 2) as int), 2)=0
          |   and mainheater > 10
       """.stripMargin)
-//    ods_table.show(10)
+    //    ods_table.show(10)
     ods_table.createOrReplaceTempView("djzk_app_result")
 
     // RCZ分组--剔除回熔
@@ -295,7 +295,7 @@ object IngotDevicePortraitAllBase {
          |         - unix_timestamp(nowtime) <= 600)
          |         then crystallength else null end as xeig_rear_10clength,         -- 等径后10min晶棒长度
          |
-        |    case when (stepno8 >0) and (crystallength <= 100) then
+         |    case when (stepno8 >0) and (crystallength <= 100) then
          |         cruciblelift else null end as xeig_local100_clift,            -- 等径0-100mm埚升
          |    case when (stepno8 >0) and (crystallength <= 200) and (crystallength > 100)
          |         then cruciblelift else null end as xeig_local200_clift,       -- 等径100-200mm埚升
@@ -363,7 +363,7 @@ object IngotDevicePortraitAllBase {
          |    case when stepno8 >0 then avg(avgslspeed) over(PARTITION BY basearea, bgroup, stepno8)
          |         else null end as xeig_entirety_avgspeed,                  -- 等径全程拉速均值
          |
-        |    -- 拉速偏差标准差 100,200,300,400,500,1200
+         |    -- 拉速偏差标准差 100,200,300,400,500,1200
          |    case when (stepno8 >0) and (crystallength > 0 and crystallength <= 100) then
          |         setslspeed - avgslspeed else null end as xeig_local100_diffspeed,          -- 等径0-100mmPLC拉速偏差
          |    case when (stepno8 >0) and (crystallength > 100 and crystallength <= 200) then
@@ -377,7 +377,7 @@ object IngotDevicePortraitAllBase {
          |    case when (stepno8 >0) and (crystallength > 500 and crystallength <= 1200) then
          |         setslspeed - avgslspeed else null end as xeig_local1200_diffspeed,         -- 等径500-1200mmPLC拉速偏差
          |
-        |    -- 直径值标准差 100,200,300,400,500,1200
+         |    -- 直径值标准差 100,200,300,400,500,1200
          |    case when (stepno8 >0) and (crystallength > 0 and crystallength <= 100) then
          |         diameter else null end as xeig_local100_diameter,          -- 等径0-100mm直径
          |    case when (stepno8 >0) and (crystallength > 100 and crystallength <= 200) then
@@ -391,7 +391,7 @@ object IngotDevicePortraitAllBase {
          |    case when (stepno8 >0) and (crystallength > 500 and crystallength <= 1200) then
          |         diameter else null end as xeig_local1200_diameter,         -- 等径500-1200mm直径
          |
-        |    -- 直径偏差标准差 100,200,300,400,500,1200
+         |    -- 直径偏差标准差 100,200,300,400,500,1200
          |    case when (stepno8 >0) and (crystallength > 0 and crystallength <= 100) then
          |         setdiameter - diameter else null end as xeig_local100_diffdiameter,          -- 等径0-100mm直径偏差
          |    case when (stepno8 >0) and (crystallength > 100 and crystallength <= 200) then
@@ -406,7 +406,7 @@ object IngotDevicePortraitAllBase {
          |         setdiameter - diameter else null end as xeig_local1200_diffdiameter,         -- 等径500-1200mm直径偏差
          |    -- ! 新增2022-07-22 （结束）！--
          |
-        |    -- !收尾指标提取! --
+         |    -- !收尾指标提取! --
          |    case when stepno9 >0 then
          |         min(nowtime) over(PARTITION BY basearea, bgroup, stepno9)
          |         else null end as xnin_starttime,     -- 收尾起始时刻
@@ -482,10 +482,10 @@ object IngotDevicePortraitAllBase {
          |          ) - unix_timestamp(nowtime) <= 300)  then
          |                    cruciblerotation else null end as xtwo_last_5crotation,    -- 化料后5min埚转
          |
-        |    -- add comment:隔离阀由开-关闭或者闸阀由开-关闭=>定义为1,否则为空
+         |    -- add comment:隔离阀由开-关闭或者闸阀由开-关闭=>定义为1,否则为空
          |    case when stepno2 >0 and (feedervalveopen = 1 or isolationvalveopen = 1) then nowtime else null end as open_nt,
          |
-        |    -- 化料阶段新增2022-07-22 --
+         |    -- 化料阶段新增2022-07-22 --
          |    case when stepno2 >0 then max(setmainheater) over(PARTITION BY basearea, bgroup, stepno2)
          |         else null end as xtwo_max_setmheater,
          |    case when stepno2 >0 then max(setbottomheater) over(PARTITION BY basearea, bgroup, stepno2)
@@ -493,7 +493,7 @@ object IngotDevicePortraitAllBase {
          |    case when stepno2 >0 then round(avg(argonflow) over(PARTITION BY basearea, bgroup, stepno2), 1)
          |         else null end as xtwo_avg_argonflow,
          |
-        |    -- !准备调温指标提取! --
+         |    -- !准备调温指标提取! --
          |    case when stepno3 >0 then
          |         min(nowtime) over(PARTITION BY basearea, bgroup, stepno3)
          |         else null end as xthr_starttime,        -- 准备调温起始时刻
@@ -536,10 +536,10 @@ object IngotDevicePortraitAllBase {
          |                    stddev(diffsurftemp) over(PARTITION BY basearea, bgroup, stepno3)
          |                    else null end as xthr_std_diffsurftemp,     -- 准备调温液温差标准差
          |
-        |    -- *********2022-11-08 add 埚转>5/功率降 标记
+         |    -- *********2022-11-08 add 埚转>5/功率降 标记
          |    case when stepno3 >0 and cruciblerotation > 5 then 1 else 0 end as xthr_mark,
          |
-        |    -- !调温指标提取! --
+         |    -- !调温指标提取! --
          |    case when stepno4 >0 then
          |                    min(nowtime) over(PARTITION BY basearea, bgroup, stepno4)
          |                    else null end as xfou_starttime,        -- 调温起始时刻
@@ -600,7 +600,7 @@ object IngotDevicePortraitAllBase {
          |                    first_value(diffsurftemp) over(PARTITION BY basearea, bgroup, stepno4 order by nowtime)
          |                    else null end as xfou_initial_diffsurftemp,           -- 调温初始液温差
          |
-        |    -- !引晶指标提取! --
+         |    -- !引晶指标提取! --
          |    case when stepno5 >0 then
          |                    min(nowtime) over(PARTITION BY basearea, bgroup, stepno5)
          |                    else null end as xfiv_starttime,        -- 引晶起始时刻
@@ -660,7 +660,7 @@ object IngotDevicePortraitAllBase {
          |                    round(stddev(diffsurftemp) over(PARTITION BY basearea, bgroup, stepno5), 1)
          |                    else null end as xfiv_std_diffsurftemp,            -- 引晶液温差标准差
          |
-        |    -- ！引晶直径<=6mm 刻的直径长度 2022-07-22(新增)
+         |    -- ！引晶直径<=6mm 刻的直径长度 2022-07-22(新增)
          |    case when (stepno5 >0) and (diameter <=6) then crystallength else null end as xfiv_lt6_clength,
          |    -- ！2022-07-15 增加！--
          |    case when stepno5 >0 then
@@ -691,7 +691,7 @@ object IngotDevicePortraitAllBase {
          |        between unbounded preceding and unbounded following)
          |        else null end as xfiv_diameterB,
          |
-        |    -- !放肩指标提取! --
+         |    -- !放肩指标提取! --
          |    case when stepno6 >0 then
          |                    min(nowtime) over(PARTITION BY basearea, bgroup, stepno6)
          |                    else null end as xsix_starttime,        -- 放肩起始时刻
@@ -766,11 +766,11 @@ object IngotDevicePortraitAllBase {
          |         rows between unbounded preceding and unbounded following)), 1)
          |         else null end as xsix_smheater_decay,                -- 放肩设定主加功率降
          |
-        |    -- 2022-11-8 add 放肩指标 （亮度偏差）
+         |    -- 2022-11-8 add 放肩指标 （亮度偏差）
          |    case when stepno6 >0 then round(meltsurftemp - setmeltsurftemp, 1) else null end as xsix_temp_diff
          |    , case when stepno6>0 and diameter>100 then 1 else 0 end as xsix_temp_group   -- 放肩直径100mm时亮度偏差分组
          |
-        |    -- !转肩指标提取! --
+         |    -- !转肩指标提取! --
          |    , case when stepno7 >0 then min(nowtime) over(PARTITION BY basearea, bgroup, stepno7)
          |         else null end as xsev_starttime,        -- 转肩起始时刻
          |    case when stepno7 >0 then first_value(diameter) over(PARTITION BY basearea, bgroup, stepno7 order by nowtime)
@@ -1909,9 +1909,9 @@ object IngotDevicePortraitAllBase {
          | ) sevth_layer_table
          | where trank=1 and iste > 0 and two_starttime is not null
     """.stripMargin)
-//    kylin_table.coalesce(10).createOrReplaceTempView("kylin_table")
+    //    kylin_table.coalesce(10).createOrReplaceTempView("kylin_table")
     kylin_table.repartition(10).createOrReplaceTempView("kylin_table")
-//    kylin_table.show(10)
+    //    kylin_table.show(10)
     println("-----------test9----------")
     spark.sql(
       s"""
