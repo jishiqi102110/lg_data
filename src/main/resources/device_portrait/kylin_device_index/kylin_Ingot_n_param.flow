@@ -1,0 +1,24 @@
+config:
+  fourdays_fore: $(new("org.joda.time.DateTime").minusDays(4).toString("yyyy-MM-dd"))
+  curday: $(new("org.joda.time.DateTime").minusDays(-1).toString("yyyy-MM-dd"))
+  nowday: $(new("org.joda.time.DateTime").minusDays(1).toString("yyyy-MM-dd"))
+  mode: 2
+  failure.emails: mafangqiang@longi.com,yanying@longi.com
+
+nodes:
+  - name: n_param
+    type: noop
+
+  - name: Ingot_n_param
+    type: command
+    config:
+      command: su - mafq -c "spark-submit --class com.long.bigdata.Ingot_n_param --master yarn --deploy-mode client --driver-memory 8g --num-executors 8 --executor-memory 10g --executor-cores 2 --queue spark --conf spark.shuffle.service.enabled=true --conf spark.sql.session.timeZone=Asia/Shanghai --conf spark.sql.catalogImplementation=hive --name device_index --jars /home/mafq/task/longi_ingot_devices/ojdbc6-11.2.0.3.jar /home/mafq/test/research_development-1.0-SNAPSHOT-dependencies.jar ${fourdays_fore} ${curday}"
+    dependsOn:
+      - n_param
+
+  - name: refresh_kylin_table
+    type: command
+    config:
+      command: impala-shell -i worker05.longi:21001 -q 'refresh ldw_ods.kylin_n_param'
+    dependsOn:
+      - Ingot_n_param

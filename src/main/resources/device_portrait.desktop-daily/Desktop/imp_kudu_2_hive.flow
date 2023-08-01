@@ -1,0 +1,28 @@
+config:
+  beforeyesterday: $(new("org.joda.time.DateTime").minusDays(3).toString("yyyy-MM-dd"))
+  yesterday: $(new("org.joda.time.DateTime").minusDays(1).toString("yyyy-MM-dd"))
+  today: $(new("org.joda.time.DateTime").toString("yyyy-MM-dd"))
+  failure.emails: mafangqiang@longi.com
+
+nodes:
+  - name: start
+    type: noop
+    config:
+      command: "Start Task"
+    
+  - name: kudu2hive_djzk_app_result
+    type: command
+    config:
+      command: su - etl /dfs/projects/etl-schedule-entry/bin/start-scheduler.sh Kudu2Hive tool.cfg ${beforeyesterday} ${yesterday} 'ods_ingot_scada.streaming_djzk_app_result nowtime ingot_prod'
+    dependsOn:
+      - start
+  - name: refreshtable
+    type: command
+    config:
+      command: impala-shell -i worker05.longi:21001 -q "invalidate metadata ods_ingot_scada.djzk_app_result;refresh ods_ingot_scada.djzk_app_result;"
+    dependsOn:
+      - kudu2hive_djzk_app_result
+  - name: end
+    type: noop
+    dependsOn:
+      - refreshtable

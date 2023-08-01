@@ -1,0 +1,24 @@
+config:
+  fourdays_fore: $(new("org.joda.time.DateTime").minusDays(4).toString("yyyy-MM-dd"))
+  curday: $(new("org.joda.time.DateTime").minusDays(-1).toString("yyyy-MM-dd"))
+  nowday: $(new("org.joda.time.DateTime").minusDays(0).toString("yyyy-MM-dd"))
+  mode: 2
+  failure.emails: mafangqiang@longi.com
+
+nodes:
+  - name: work_huors
+    type: noop
+
+  - name: autotime
+    type: command
+    config:
+      command: su - mafq -c "spark-submit --class com.longi.dwd.IngotAutoTime --master yarn --deploy-mode client --driver-memory 8G --executor-memory 8G --num-executors 16 --name workhuors --queue spark --conf spark.shuffle.service.enabled=true --conf spark.sql.session.timeZone=Asia/Shanghai --conf spark.driver.memoryOverhead=8g --conf spark.executor.memoryOverhead=8G --conf spark.sql.catalogImplementation=hive --conf spark.sql.warehouse.dir=hdfs://longi/edw/dwd/pp_ingot/ingot_kylin/kylin_work_hours_v1/ --jars /home/mafq/task/ingot_work_hours/ojdbc6-11.2.0.3.jar /home/mafq/task/ingot_work_hours/ingot_dp-1.1-SNAPSHOT-dependencies.jar ${fourdays_fore} ${nowday}"
+    dependsOn:
+      - work_huors
+
+  - name: refresh_autotime
+    type: command
+    config:
+      command: impala-shell -i worker05.longi:21001 -q 'refresh ldw_ods.kylin_work_hours_v1'
+    dependsOn:
+      - autotime
