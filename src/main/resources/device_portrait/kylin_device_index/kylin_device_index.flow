@@ -12,7 +12,7 @@ nodes:
   - name: device_portrait_data
     type: command
     config:
-      command: su - liangwt -c "spark-submit --class warehouse.dwd.scada.IngotDevicePortraitAllBase --master yarn --deploy-mode client --driver-memory 10g --num-executors 15 --executor-memory 10g --executor-cores 2 --queue spark --conf spark.shuffle.service.enabled=true  --conf spark.default.parallelism=300  --conf spark.sql.session.timeZone=Asia/Shanghai --conf spark.sql.catalogImplementation=hive --name device_index_temp /home/liangwt/jar/silicon_data_flow-1.0-SNAPSHOT-dependencies.jar ${fourdays_fore} ${curday}"
+      command: su - liangwt -c "spark-submit --class warehouse.dwd.scada.IngotDevicePortraitAllBase --master yarn --deploy-mode client --driver-memory 6g --num-executors 8 --executor-memory 10g --executor-cores 2 --queue spark --conf spark.shuffle.service.enabled=true  --conf spark.default.parallelism=300  --conf spark.sql.session.timeZone=Asia/Shanghai --conf spark.sql.catalogImplementation=hive --name device_index_temp /home/liangwt/jar/silicon_data_flow-1.0-SNAPSHOT-dependencies.jar ${fourdays_fore} ${curday}"
     dependsOn:
       - device_index
 

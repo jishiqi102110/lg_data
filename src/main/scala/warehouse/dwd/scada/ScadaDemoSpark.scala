@@ -69,7 +69,8 @@ object ScadaDemoSpark {
         |              , left (nowtime,10) as day_id
         |         FROM (
         |             SELECT base
-        |                 , substring (basearea, 4, 1) as area
+        |                -- , substring (basearea, 4, 1) as area
+        |                 ,left(right(basearea, 3), 1) as area
         |                 , right (basearea
         |                 , 3) as puller
         |                 , basearea
@@ -180,12 +181,19 @@ object ScadaDemoSpark {
     val cal: Calendar = Calendar.getInstance()
     cal.add(Calendar.DATE,-5)
     val day: String = dateFormat.format(cal.getTime)
+    val tempDF= spark.sql(
+    s"""
+       |select * from result_df
+       |where day_id > '$day'
+       |""".stripMargin)
+    val count = tempDF.count()
+    println(s"写入 ${day} 以后的数据+${count}")
 
     spark.sql(
       s"""
          |insert overwrite table $outTable partition(day_id)
          |select * from result_df
-         |where day_id > $day
+         |where day_id > '$day'
       """.stripMargin)
     println("***** 成功写入 ******")
 

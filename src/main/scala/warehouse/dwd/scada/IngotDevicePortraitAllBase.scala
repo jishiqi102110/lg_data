@@ -4,6 +4,8 @@ import org.apache.spark.sql.SparkSession
 
 object IngotDevicePortraitAllBase {
   def main(args: Array[String]): Unit = {
+
+    // todo 该表名、参数设置、上线
     //北郊集群
     //        val kuduMaster = "worker01.center.longi:7051,worker03.center.longi:7051,worker05.center.longi:7051"
     // 南郊集群worker01.longi:7051,worker02.longi:7051,worker03.longi:7051
@@ -32,8 +34,10 @@ object IngotDevicePortraitAllBase {
     import spark.implicits._
     val daysbefore = args(0)
     val curday = args(1)
-    //    val daysbefore = "2023-01-01"
-    //    val curday = "2023-01-07"
+    println(s"daysbefore :$daysbefore")
+    println(s"curday :$curday")
+    //val daysbefore = "2023-0-01"
+    //val curday = "2023-08-08"
 
     // 2.读取kudu表数据
     //        spark.read.format("kudu").options(
@@ -89,27 +93,73 @@ object IngotDevicePortraitAllBase {
          | FROM ${djzkResModel}
          |  WHERE day_id >= '${daysbefore}'
          |   and day_id <= '${curday}'
-         |   and mod(cast(substring (nowtime, 18, 2) as int), 2)=0
-         |   and mainheater > 10
-      """.stripMargin)
-    //    ods_table.show(10)
+         |  -- and mod(cast(substring (nowtime, 18, 2) as int), 2)=0 --分钟数取2模
+         |   and mainheater > 10  --实际主加功率
+      """.stripMargin).repartition(300)
+    ods_table.show(10)
     ods_table.createOrReplaceTempView("djzk_app_result")
 
     // RCZ分组--剔除回熔
+
+    // todo
+    // 92行，代码，分钟数
+    // 93 行   and mainheater > 10  --实际主加功率
+    /*
+     上一个低加功率+ 上一个 设定主加功率 <120 并且  设定低加功率+设定主加功率>=120 then  xisopenbot是否开底加
+     state >4 and state<= 9  then state else 0 end  fill_state
+     开底加的意思
+
+     SUM(XISOPENBOT) OVER(PARTITION BY basearea ORDER BY NOWTIME) XBGROUP   -- RCZ
+     异常操作：加料异常操作、底加下去，
+
+     rcz分组->调温后续步骤  逐步去掉异常数据
+
+     先算 XBGROUP ，然后根据  MAX(fill_state) OVER(PARTITION BY basearea, XBGROUP) MAXSTATE
+     判断是不是真的在加料
+
+     CASE WHEN (MAXSTATE IN (4, 5, 6, 7, 8, 9)) THEN XISOPENBOT ELSE 0 END ISOPENBOT
+     X需要判断，IS就是对的
+
+     SUM(ISOPENBOT) OVER(partition by basearea order by nowtime) BGROUP     ---- RCZ段数
+
+     然后开始数据分组
+
+     CASE WHEN ((BGROUP > 0) AND (STATE = 4) AND (laststate != 4)) THEN 1 ELSE 0 END XISTE, -- 调温分组
+     可能在中间加料，去掉等于0，这里不是很清楚
+
+
+      (laststate != 9)) THEN 1 ELSE 0 END  分组的时候为什么上一个必须不是当前state，然后最后筛选出 BGROUP >0
+
+     关底加
+             CASE WHEN ((last_sbheater + last_smheater >= 120)
+                  and (setbottomheater + setmainheater < 120)) THEN 1 ELSE 0 END  XISCB  -- 关底加分组
+     CBGP 关底加分组
+
+    second_layer_table 843
+    合炉
+
+    row_number() over(partition by basearea, bgroup, stepno7 order by nowtime) rank7
+
+    kylin_temp1
+
+    开底加至第一次隔离阀（VR闸阀）打开时长
+    隔离阀（VR闸阀）
+
+    指标分层计算大致思路框架
+
+     */
     val ods_spark_df = spark.sql(
       s"""
-         |SELECT *
-         |  FROM ( SELECT *,
+         |   SELECT *,
          |              substr(basearea, 1, 2) as base,   --基地
          |              SUBSTR(BASEAREA, -3) as puller,    --炉号
          |              case when ((last_sbheater + last_smheater < 120)
          |                  and (setbottomheater + setmainheater >= 120)) then 1 else 0 end xisopenbot, -- 是否开底加
          |              case when ((state > 4) and (state <= 9)) then state else 0 end fill_state
          |         FROM djzk_app_result
-         | ) A
       """.stripMargin)
     ods_spark_df.createOrReplaceTempView("ods_table")
-    //    ods_spark_df.where("xisopenbot>0").show(20)
+    ods_spark_df.where("xisopenbot>0").show(20)
     // 数据分组，开底加分组，调温分组、引晶分组、放肩分组、转肩分组、等径分组、收尾分组
     val group_df = spark.sql(
       s"""
@@ -234,6 +284,7 @@ object IngotDevicePortraitAllBase {
          |       ) C
         """.stripMargin)
     step_df.createOrReplaceTempView("first_layer_table")
+    println("first_layer_table")
     // ----------------------------------
     val temp_df01 = spark.sql(
       s"""
@@ -810,7 +861,7 @@ object IngotDevicePortraitAllBase {
          |   or stepno8 >0 or stepno9 >0
       """.stripMargin)
     temp_df01.createOrReplaceTempView("second_layer_table")
-    //    temp_df01.where("stepno8>0").show(10)
+    temp_df01.where("stepno8>0").show(10)
 
     // 上面应该没有问题-三次指标组合
     val temp_df02 = spark.sql(
@@ -1213,6 +1264,7 @@ object IngotDevicePortraitAllBase {
        """.stripMargin)
 
     temp_df02.createOrReplaceTempView("kylin_temp1")
+
     //    println("-----------test5----------")
     //
     val temp_df03 = spark.sql(
@@ -1350,7 +1402,7 @@ object IngotDevicePortraitAllBase {
          |       or (stepno9 > 0)
          |       or (rank3 = 1 and stepno3 >0)
        """.stripMargin)
-    //    temp_df04.where("stepno8>0").show(10)
+    temp_df04.show(10)
     temp_df04.createOrReplaceTempView("kylin_temp2")
 
     val temp_df05 = spark.sql(
@@ -1379,6 +1431,7 @@ object IngotDevicePortraitAllBase {
       """.stripMargin)
 
     temp_df05.createOrReplaceTempView("sixth_layer_table")
+    temp_df05.show(10)
 
     // 五次指标组合
     val kylin_table = spark.sql(
@@ -1911,11 +1964,11 @@ object IngotDevicePortraitAllBase {
     """.stripMargin)
     //    kylin_table.coalesce(10).createOrReplaceTempView("kylin_table")
     kylin_table.repartition(10).createOrReplaceTempView("kylin_table")
-    //    kylin_table.show(10)
+    kylin_table.show(10)
     println("-----------test9----------")
     spark.sql(
       s"""
-         |insert overwrite table dwd_pp_ingot.ingot_device_portrait partition(day_id)
+         |insert overwrite table dwd_pp_ingot.ingot_device_portrait_temp partition(day_id)
          |select * from kylin_table
       """.stripMargin)
     println("hive写入成功......")
