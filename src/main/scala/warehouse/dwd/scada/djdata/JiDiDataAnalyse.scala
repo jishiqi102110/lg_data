@@ -15,9 +15,10 @@ object JiDiDataAnalyse {
   import spark.implicits._
 
   def main(args: Array[String]): Unit = {
-    var stove = "A"
-    if (args.size == 2) {
+    var stove = ""
+    if (args.size >0) {
       stove = args(0)
+      println("stove:"+stove)
     }
     //todo 改写入方式
 
@@ -122,7 +123,7 @@ object JiDiDataAnalyse {
 
     val ar_flow_view_sql =
       """
-        |INSERT OVERWRITE TABLE test.agg_script_ar_flow partition(day)
+        |INSERT INTO TABLE test.agg_script_ar_flow partition(day)
         |SELECT * FROM ar_flow_view
         |""".stripMargin
     spark.sql(ar_flow_view_sql)
@@ -267,14 +268,11 @@ object JiDiDataAnalyse {
         |           t3.PHASE3_PHASE_POS AS MELT_PHASE3_PHASE_POS,
         |           t3.PHASE4_PHASE_POS AS MELT_PHASE4_PHASE_POS,
         |           t3.PHASE5_PHASE_POS AS MELT_PHASE5_PHASE_POS
-        |    FROM CR_VIEW t0
-        |    FULL JOIN
-        |    CP_VIEW t1
+        |    FROM CR_VIEW t0  --准备调温打埚转
+        |    left JOIN
+        |    CP_VIEW t1 --准备调温放埚位
         |    ON t0.CRYSTALID = t1.CRYSTALID AND t0.BGROUP = t1.BGROUP
-        |    FULL JOIN
-        |    DUAL_TARGET_VIEW t2
-        |    ON t0.CRYSTALID = t2.CRYSTALID AND t0.BGROUP = t2.BGROUP
-        |    FULL JOIN
+        |   left JOIN
         |--     (SELECT *
         |--         FROM (
         |--         SELECT CRYSTALId, BGROUP, CSPOS_GROUP, DURATION, MAX_MELTSURFTEMP, PHASE_POS
@@ -313,8 +311,11 @@ object JiDiDataAnalyse {
         |              FROM melt_phase_view
         |          ) subquery
         |     GROUP BY CRYSTALId, BGROUP
-        |    ) t3
+        |    ) t3  --准备调温及调温，籽晶预热及调温位置
         |    ON t0.CRYSTALID = t3.CRYSTALID AND t0.BGROUP = t3.BGROUP
+        |    left JOIN
+        |    DUAL_TARGET_VIEW t2 --引晶双目标
+        |    ON t0.CRYSTALID = t2.CRYSTALID AND t0.BGROUP = t2.BGROUP
         |""".stripMargin
 
     val MERGED_FEATURE_sql_DF = spark.sql(MERGED_FEATURE_sql)
@@ -326,7 +327,7 @@ object JiDiDataAnalyse {
 
     val MERGED_FEATURE_RES_sql =
       """
-        |INSERT OVERWRITE TABLE test.agg_script_merged_feature2
+        |INSERT INTO TABLE test.agg_script_merged_feature2
         |SELECT * FROM MERGED_FEATURE
         |""".stripMargin
     spark.sql(MERGED_FEATURE_RES_sql)
@@ -536,9 +537,9 @@ object JiDiDataAnalyse {
         |               t1.AVG_SETMELTSURFTEMP AS DOWN_SETMELTSURFTEMP,
         |               t1.MAX_MAX_MELTSURFTEMP AS DOWN_MAX_MELTSURFTEMP,
         |               t1.AVG_DELTA_SLOPE AS AVG_DOWN_SLOPE
-        |        FROM temp_slope_table_4 t0
-        |        FULL JOIN
-        |        temp_down_slope_table_4 t1
+        |        FROM temp_slope_table_4 t0 ---调温准备阶段升温斜率
+        |       left  JOIN
+        |        temp_down_slope_table_4 t1  ---调温准备阶段降温斜率
         |        ON t0.CRYSTALID = t1.CRYSTALID AND t0.BGROUP = t1.BGROUP
         |""".stripMargin
 
@@ -550,7 +551,7 @@ object JiDiDataAnalyse {
 
     val MERGED_FEATURE_RES_sql =
       """
-        |INSERT OVERWRITE TABLE test.agg_temp_slope
+        |INSERT INTO TABLE test.agg_temp_slope
         |SELECT * FROM result_df_sql_DF_view
         |""".stripMargin
     spark.sql(MERGED_FEATURE_RES_sql)
