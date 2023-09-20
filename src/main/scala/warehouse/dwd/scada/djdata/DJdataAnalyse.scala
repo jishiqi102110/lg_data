@@ -24,7 +24,7 @@ object DJdataAnalyse {
     // step1 rcz 分组
     val bggroupSql=
       s"""
-      | select * from
+      |select * from
       |(select *,
       |           case when state = 8 then MEGP else 0 end stepno8,   -- 等径
       |           case when state = 9 then ENGP else 0 end stepno9,   -- 收尾
@@ -56,19 +56,15 @@ object DJdataAnalyse {
       |        avgslspeed , --平均拉速
       |        cruciblepos, --埚位
       |        meltlevel, --液口距
-      |        lag(setbottomheater, 1)   over(partition BY basearea, crystalid order by nowtime) as last_sbheater, --设定底加功率lag
-      |        lag(setmainheater, 1) over(partition BY basearea, crystalid order by nowtime) as last_smheater,   --设定主加功率lag
-      |        lag(mainheater, 1) over(partition BY basearea, crystalid order by nowtime) as last_mheater,       --设定主加功率lag
-      |        lag(bottomheater, 1) over(partition BY basearea, crystalid order by nowtime) as last_bheater,     --设定主加功率lag
-      |        lag(nowtime, 1) over(partition BY basearea, crystalid order by nowtime) as lasttime,
-      |        lag(state, 1) over(partition by basearea, crystalid order by nowtime) as laststate ,              --换热器位置
+      |        leadstate,
+      |        laststate,
       |        TEGP,-- 调温分组
-      |        SUM(ISSE) OVER(PARTITION BY basearea, bgroup order by nowtime) as SEGP,    -- 引晶分组  --后续使用的时候记得只拿>0的数据
-      |        SUM(ISSH) OVER(PARTITION BY basearea, bgroup order by nowtime) as SHGP,    -- 放肩分组
-      |        SUM(ISTU) OVER(PARTITION BY basearea, bgroup order by nowtime) as TUGP,    -- 转肩分组
-      |        SUM(ISME) OVER(PARTITION BY basearea, bgroup order by nowtime) as MEGP,    -- 等径分组
-      |        SUM(ISEN) OVER(PARTITION BY basearea, bgroup order by nowtime) as ENGP,    -- 收尾分组
-      |        SUM(ISCB) OVER(PARTITION BY basearea, bgroup order by nowtime) as CBGP,    -- 关底加分组
+      |        SUM(ISSE) OVER(PARTITION BY basearea,crystalid, bgroup order by nowtime) as SEGP,    -- 引晶分组  --后续使用的时候记得只拿>0的数据
+      |        SUM(ISSH) OVER(PARTITION BY basearea,crystalid, bgroup order by nowtime) as SHGP,    -- 放肩分组
+      |        SUM(ISTU) OVER(PARTITION BY basearea,crystalid, bgroup order by nowtime) as TUGP,    -- 转肩分组
+      |        SUM(ISME) OVER(PARTITION BY basearea,crystalid, bgroup order by nowtime) as MEGP,    -- 等径分组
+      |        SUM(ISEN) OVER(PARTITION BY basearea,crystalid, bgroup order by nowtime) as ENGP,    -- 收尾分组
+      |        SUM(ISCB) OVER(PARTITION BY basearea,crystalid, bgroup order by nowtime) as CBGP,    -- 关底加分组
       |        BGROUP   -- 开底加分组
       |        from
       |(SELECT *,
@@ -80,22 +76,22 @@ object DJdataAnalyse {
       |       CASE WHEN max_XCBGP IN (4, 5, 6, 7, 8, 9) THEN XISCB ELSE 0 END ISCB
       |       from
       |(SELECT *,
-      |       MAX(fill_state) OVER(PARTITION BY basearea, BGROUP, XSEGP) as max_XSEGP,
-      |       MAX(fill_state) OVER(PARTITION BY basearea, BGROUP, XSHGP) as max_XSHGP,
-      |       MAX(fill_state) OVER(PARTITION BY basearea, BGROUP, XTUGP) as max_XTUGP,
-      |       MAX(fill_state) OVER(PARTITION BY basearea, BGROUP, XMEGP) as max_XMEGP,
-      |       MAX(fill_state) OVER(PARTITION BY basearea, BGROUP, XENGP) as max_XENGP,
-      |       MAX(fill_state) OVER(PARTITION BY basearea, BGROUP, XCBGP) as max_XCBGP
+      |       MAX(fill_state) OVER(PARTITION BY basearea,crystalid, BGROUP, XSEGP) as max_XSEGP,
+      |       MAX(fill_state) OVER(PARTITION BY basearea,crystalid, BGROUP, XSHGP) as max_XSHGP,
+      |       MAX(fill_state) OVER(PARTITION BY basearea,crystalid, BGROUP, XTUGP) as max_XTUGP,
+      |       MAX(fill_state) OVER(PARTITION BY basearea,crystalid, BGROUP, XMEGP) as max_XMEGP,
+      |       MAX(fill_state) OVER(PARTITION BY basearea,crystalid, BGROUP, XENGP) as max_XENGP,
+      |       MAX(fill_state) OVER(PARTITION BY basearea,crystalid, BGROUP,XCBGP) as max_XCBGP
       |       from
       |(SELECT *,
       |       -- 这里在开始按照rcz分组进行分组
-      |       SUM(XISTE) OVER(PARTITION BY basearea, bgroup ORDER BY nowtime) TEGP,   -- 调温分组
-      |       SUM(XISSE) OVER(PARTITION BY basearea, bgroup ORDER BY nowtime) XSEGP,
-      |       SUM(XISSH) OVER(PARTITION BY basearea, bgroup ORDER BY nowtime) XSHGP,
-      |       SUM(XISTU) OVER(PARTITION BY basearea, bgroup ORDER BY nowtime) XTUGP,
-      |       SUM(XISME) OVER(PARTITION BY basearea, bgroup ORDER BY nowtime) XMEGP,
-      |       SUM(XISEN) OVER(PARTITION BY basearea, bgroup ORDER BY nowtime) XENGP,
-      |       SUM(XISCB) OVER(PARTITION BY basearea, bgroup ORDER BY nowtime) XCBGP   -- 关底加分组
+      |       SUM(XISTE) OVER(PARTITION BY basearea, crystalid,bgroup ORDER BY nowtime) TEGP,   -- 调温分组
+      |       SUM(XISSE) OVER(PARTITION BY basearea, crystalid,bgroup ORDER BY nowtime) XSEGP,
+      |       SUM(XISSH) OVER(PARTITION BY basearea, crystalid,bgroup ORDER BY nowtime) XSHGP,
+      |       SUM(XISTU) OVER(PARTITION BY basearea, crystalid,bgroup ORDER BY nowtime) XTUGP,
+      |       SUM(XISME) OVER(PARTITION BY basearea, crystalid,bgroup ORDER BY nowtime) XMEGP,
+      |       SUM(XISEN) OVER(PARTITION BY basearea, crystalid,bgroup ORDER BY nowtime) XENGP,
+      |       SUM(XISCB) OVER(PARTITION BY basearea, crystalid,bgroup ORDER BY nowtime) XCBGP   -- 关底加分组
       |       from
       |(select *,
       |        CASE WHEN ((BGROUP > 0) AND (STATE = 4) AND (laststate != 4)) THEN 1 ELSE 0 END XISTE, -- 调温分组
@@ -109,24 +105,24 @@ object DJdataAnalyse {
       |                  (laststate != 8)) THEN 1 ELSE 0 END      XISME,  -- 等径分组
       |        CASE WHEN ((BGROUP > 0) AND (STATE = 9) AND
       |                  (laststate != 9)) THEN 1 ELSE 0 END      XISEN,  -- 收尾分组
-      |        CASE WHEN ((last_sbheater + last_smheater >= 120)
-      |                  and (setbottomheater + setmainheater < 120)) THEN 1 ELSE 0 END  XISCB  -- 关底加分组
+      |        CASE WHEN ((last_sbheater + last_smheater >= 130)
+      |                  and (setbottomheater + setmainheater < 130)) THEN 1 ELSE 0 END  XISCB  -- 关底加分组
       |from
       |(SELECT *, --EL
-      |        SUM(ISOPENBOT) OVER(partition by basearea order by nowtime) BGROUP     ---- RCZ段数
+      |        SUM(ISOPENBOT) OVER(partition by basearea,crystalid order by nowtime) BGROUP     ---- RCZ段数
       |        from
       |(select *,
       |        CASE WHEN (MAXSTATE IN (4, 5, 6, 7, 8, 9)) THEN XISOPENBOT ELSE 0 END ISOPENBOT
       |        from
       |(SELECT *,  --CL
-      |         MAX(fill_state) OVER(PARTITION BY basearea, XBGROUP) MAXSTATE
+      |         MAX(fill_state) OVER(PARTITION BY basearea,crystalid, XBGROUP) MAXSTATE
       |         from
       |(SELECT *,
-      |        SUM(xisopenbot) OVER(PARTITION BY basearea ORDER BY nowtime) XBGROUP   -- RCZ
+      |        SUM(xisopenbot) OVER(PARTITION BY basearea,crystalid ORDER BY nowtime) XBGROUP   -- RCZ
       |        from
       |(select * ,
-      |         case when ((last_sbheater + last_smheater < 120)
-      |              and (setbottomheater + setmainheater >= 120)) then 1 else 0 end xisopenbot, -- 是否开底加
+      |         case when ((last_sbheater + last_smheater < 130)
+      |              and (setbottomheater + setmainheater >= 130)) then 1 else 0 end xisopenbot, -- 是否开底加
       |              case when ((state > 4) and (state <= 9)) then state else 0 end fill_state
       |              from
       |(SELECT basearea,
@@ -154,23 +150,25 @@ object DJdataAnalyse {
       |        lag(mainheater, 1) over(partition BY basearea, crystalid order by nowtime) as last_mheater,       --设定主加功率lag
       |        lag(bottomheater, 1) over(partition BY basearea, crystalid order by nowtime) as last_bheater,     --设定主加功率lag
       |        lag(nowtime, 1) over(partition BY basearea, crystalid order by nowtime) as lasttime,
-      |        lag(state, 1) over(partition by basearea, crystalid order by nowtime) as laststate,              --换热器位置
+      |        lag(state, 1) over(partition by basearea, crystalid order by nowtime) as laststate,
+      |        lead(state, 1) over(partition by basearea, crystalid order by nowtime) as leadstate,
       |        row_number() over(partition by basearea order by crystalid) as rank_num
       | FROM ods_ingot_scada.djzk_app_result
       | WHERE
       |    day_id >= '2023-01-01'
       |   and day_id <= '2023-08-10'
-      |   and crystalid !='DS'
+      |   and  crystalid !='DS'
       |  and length (crystalid)>=10
-      |  and mainheater > 10  --实际主加功率
-      |--   and BASEAREA = 'GF_B96'
-      |--  and crystalid = 'BBS38B5401'
+      |  --and mainheater > 10  --实际主加功率
+      |  --and BASEAREA = 'GF_G03'
+      |--   and crystalid = 'ZQS35G0101'
       |   and  substr(basearea, 1, 2)='QJ'
       |)AL
-      |where rank_num>1
+      |    where rank_num>1
       |    )
-      |BL)CL)DL)EL)FL)GL)HL)IL)JL)KL)LL
-      |where stepno6 >0
+      |BL)CL)DL)EL)FL
+      |    where bgroup>0
+      |    )GL)HL)IL)JL)KL)LL
       | """.stripMargin
 
     val bggroupSqlDF= spark.sql(bggroupSql)
@@ -198,92 +196,79 @@ object DJdataAnalyse {
          |       avg_meltlevel,--平均液口距
          |       avg_cruciblepos,--平均埚位
          |       BGROUP,
-         |       stepno6,
+         |       fjgroup,
          |      0_100_avgslspeed_rate,  -- 0_100拉速变化率
-         |      100_200_avgslspeed_rate,  -- 100_200拉速变化率
-         |      200_300_avgslspeed_rate,  -- 200_300拉速变化率
-         |
          |      0_100_diameter_rate,  -- 0_100直径变化率
-         |      100_200_diameter_rate,  -- 100_200直径变化率
-         |      200_300_diameter_rate,  -- 200_300直径变化率
-         |
          |      0_100_shoulder_rate, -- 0_100肩形变化率
+         |      100_200_avgslspeed_rate,  -- 100_200拉速变化率
+         |      100_200_diameter_rate,  -- 100_200直径变化率
          |      100_200_shoulder_rate, -- 100_200肩形变化率
+         |      200_300_avgslspeed_rate,  -- 200_300拉速变化率
+         |      200_300_diameter_rate,  -- 200_300直径变化率
          |      200_300_shoulder_rate -- 200_300肩形变化率
+         |
          |from
          |(select *,
-         |       round(0_100_diff_crystallength/0_100_duration,4) as 0_100_avgslspeed_rate,  -- 0_100拉速变化率
+         |       round(0_100_diff_avgslspeed/0_100_duration,4) as 0_100_avgslspeed_rate,  -- 0_100拉速变化率
          |       round(0_100_diff_diameter/0_100_duration,4) as 0_100_diameter_rate,  -- 0_100直径变化率
-         |       round((0_100_diff_diameter/0_100_diff_crystallength)/0_100_duration,4) as 0_100_shoulder_rate, -- 0_100肩形变化率
+         |       round((0_100_diff_shoulder)/0_100_duration,4) as 0_100_shoulder_rate, -- 0_100肩形变化率
          |
-         |       round(100_200_diff_crystallength/100_200_duration,4) as 100_200_avgslspeed_rate,  -- 100_200拉速变化率
+         |       round(100_200_diff_avgslspeed/100_200_duration,4) as 100_200_avgslspeed_rate,  -- 100_200拉速变化率
          |       round(100_200_diff_diameter/100_200_duration,4) as 100_200_diameter_rate,  -- 100_200直径变化率
-         |       round((100_200_diff_diameter/100_200_diff_crystallength)/100_200_duration,4) as 100_200_shoulder_rate, -- 100_200肩形变化率
+         |       round((100_200_diff_shoulder)/100_200_duration,4) as 100_200_shoulder_rate, -- 100_200肩形变化率
          |
-         |       round(200_300_diff_crystallength/200_300_duration,4) as 200_300_avgslspeed_rate,  -- 200_300拉速变化率
+         |       round(200_300_diff_avgslspeed/200_300_duration,4) as 200_300_avgslspeed_rate,  -- 200_300拉速变化率
          |       round(200_300_diff_diameter/200_300_duration,4) as 200_300_diameter_rate,  -- 200_300直径变化率
-         |       round((200_300_diff_diameter/200_300_diff_crystallength)/200_300_duration,4) as 200_300_shoulder_rate, -- 200_300肩形变化率
-         |       row_number() over(partition by basearea,crystalid,BGROUP,stepno6  order by nowtime) as rank_num
+         |       round((200_300_diff_shoulder)/200_300_duration,4) as 200_300_shoulder_rate -- 200_300肩形变化率
          |       from
-         |(select * ,
-         |(unix_timestamp(max(x0_100_end_time) over(partition by crystalid,basearea,BGROUP,stepno6))-unix_timestamp(max(x0_100_start_time) over(partition by crystalid,basearea,BGROUP,stepno6)))/3600 as 0_100_duration,
-         |     max(x0_100_start_avgslspeed) over(partition by crystalid,basearea,BGROUP,stepno6)- max(x0_100_end_avgslspeed) over(partition by crystalid,basearea,BGROUP,stepno6) as 0_100_diff_avgslspeed, -- 0_100拉速差值
-         |     max(x0_100_end_diameter) over(partition by crystalid,basearea,BGROUP,stepno6)- max(x0_100_start_diameter) over(partition by crystalid,basearea,BGROUP,stepno6) as 0_100_diff_diameter, -- 0-100直径差值
-         |     max(x0_100_end_shoulder) over(partition by crystalid,basearea,BGROUP,stepno6)- max(x0_100_start_shoulder) over(partition by crystalid,basearea,BGROUP,stepno6) as 0_100_diff_shoulder, -- 0-100肩形差值
-         |     max(x0_100_end_crystallength) over(partition by crystalid,basearea,BGROUP,stepno6)- max(x0_100_start_crystallength) over(partition by crystalid,basearea,BGROUP,stepno6) as 0_100_diff_crystallength, -- 0-100长度差值
+         |(select *,
+         |     (unix_timestamp(max(x0_100_end_time) over(partition by basearea, crystalid,BGROUP,fjgroup))-unix_timestamp(max(x0_100_start_time) over(partition by basearea, crystalid,BGROUP,fjgroup)))/60 as 0_100_duration,
+         |     max(x0_100_start_avgslspeed) over(partition by basearea, crystalid,BGROUP,fjgroup)- max(x0_100_end_avgslspeed) over(partition by basearea, crystalid,BGROUP,fjgroup) as 0_100_diff_avgslspeed, -- 0_100拉速差值
+         |     max(x0_100_end_diameter) over(partition by basearea, crystalid,BGROUP,fjgroup)- max(x0_100_start_diameter) over(partition by basearea, crystalid,BGROUP,fjgroup) as 0_100_diff_diameter, -- 0-100直径差值
+         |     max(x0_100_end_shoulder) over(partition by basearea, crystalid,BGROUP,fjgroup)- max(x0_100_start_shoulder) over(partition by basearea, crystalid,BGROUP,fjgroup) as 0_100_diff_shoulder, -- 0-100肩形差值
          |
+         |     (unix_timestamp(max(x100_200_end_time) over(partition by basearea, crystalid,BGROUP,fjgroup))-unix_timestamp(max(x100_200_start_time) over(partition by basearea, crystalid,BGROUP,fjgroup)))/60 as 100_200_duration,
+         |     max(x100_200_start_avgslspeed) over(partition by basearea, crystalid,BGROUP,fjgroup)- max(x100_200_end_avgslspeed) over(partition by basearea, crystalid,BGROUP,fjgroup) as 100_200_diff_avgslspeed, -- 100_200拉速差值
+         |     max(x100_200_end_diameter) over(partition by basearea, crystalid,BGROUP,fjgroup)- max(x100_200_start_diameter) over(partition by basearea, crystalid,BGROUP,fjgroup) as 100_200_diff_diameter, -- 100_200直径差值
+         |     max(x100_200_end_shoulder) over(partition by basearea, crystalid,BGROUP,fjgroup)- max(x100_200_start_shoulder) over(partition by basearea, crystalid,BGROUP,fjgroup) as 100_200_diff_shoulder, -- 100_200肩形差值
          |
-         |     (unix_timestamp(max(x100_200_end_time) over(partition by crystalid,basearea,BGROUP,stepno6))-unix_timestamp(max(x100_200_start_time) over(partition by crystalid,basearea,BGROUP,stepno6)))/3600 as 100_200_duration,
-         |     max(x100_200_start_avgslspeed) over(partition by crystalid,basearea,BGROUP,stepno6)- max(x100_200_end_avgslspeed) over(partition by crystalid,basearea,BGROUP,stepno6) as 100_200_diff_avgslspeed, -- 100_200拉速差值
-         |     max(x100_200_end_diameter) over(partition by crystalid,basearea,BGROUP,stepno6)- max(x100_200_start_diameter) over(partition by crystalid,basearea,BGROUP,stepno6) as 100_200_diff_diameter, -- 100_200直径差值
-         |     max(x100_200_end_shoulder) over(partition by crystalid,basearea,BGROUP,stepno6)- max(x100_200_start_shoulder) over(partition by crystalid,basearea,BGROUP,stepno6) as 100_200_diff_shoulder, -- 100_200肩形差值
-         |     max(x100_200_end_crystallength) over(partition by crystalid,basearea,BGROUP,stepno6)- max(x100_200_start_crystallength) over(partition by crystalid,basearea,BGROUP,stepno6) as 100_200_diff_crystallength, -- 0-100长度差值
-         |
-         |     (unix_timestamp(max(x200_300_end_time) over(partition by crystalid,basearea,BGROUP,stepno6))-unix_timestamp(max(x200_300_start_time) over(partition by crystalid,basearea,BGROUP,stepno6)))/3600 as 200_300_duration,
-         |     max(x200_300_start_avgslspeed) over(partition by crystalid,basearea,BGROUP,stepno6)- max(x200_300_end_avgslspeed) over(partition by crystalid,basearea,BGROUP,stepno6) as 200_300_diff_avgslspeed, -- 200_300拉速差值
-         |     max(x200_300_end_diameter) over(partition by crystalid,basearea,BGROUP,stepno6)- max(x200_300_start_diameter) over(partition by crystalid,basearea,BGROUP,stepno6) as 200_300_diff_diameter, -- 200_300直径差值
-         |     max(x200_300_end_shoulder) over(partition by crystalid,basearea,BGROUP,stepno6)- max(x200_300_start_shoulder) over(partition by crystalid,basearea,BGROUP,stepno6) as 200_300_diff_shoulder, -- 200_300肩形差值
-         |     max(x200_300_end_crystallength) over(partition by crystalid,basearea,BGROUP,stepno6)- max(x200_300_start_crystallength) over(partition by crystalid,basearea,BGROUP,stepno6) as 200_300_diff_crystallength -- 0-100长度差值
-         |
+         |     (unix_timestamp(max(x200_300_end_time) over(partition by basearea, crystalid,BGROUP,fjgroup))-unix_timestamp(max(x200_300_start_time) over(partition by basearea, crystalid,BGROUP,fjgroup)))/60 as 200_300_duration,
+         |     max(x200_300_start_avgslspeed) over(partition by basearea, crystalid,BGROUP,fjgroup)- max(x200_300_end_avgslspeed) over(partition by basearea, crystalid,BGROUP,fjgroup) as 200_300_diff_avgslspeed, -- 200_300拉速差值
+         |     max(x200_300_end_diameter) over(partition by basearea, crystalid,BGROUP,fjgroup)- max(x200_300_start_diameter) over(partition by basearea, crystalid,BGROUP,fjgroup) as 200_300_diff_diameter, -- 200_300直径差值
+         |     max(x200_300_end_shoulder) over(partition by basearea, crystalid,BGROUP,fjgroup)- max(x200_300_start_shoulder) over(partition by basearea, crystalid,BGROUP,fjgroup) as 200_300_diff_shoulder -- 200_300肩形差值
          |from
          |(select *,
-         |        case when diameter_group=1 then first_value(nowtime) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x0_100_start_time,--0-100开始时间
-         |       case when diameter_group=1 then  first_value(nowtime) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x0_100_end_time, -- 0-100结束时间
-         |       case when diameter_group=1 then first_value(avgslspeed) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x0_100_start_avgslspeed,--0-100开始拉速
-         |       case when diameter_group=1 then  first_value(avgslspeed) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x0_100_end_avgslspeed, -- 0-100结束拉速
-         |       case when diameter_group=1 then first_value(diameter) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x0_100_start_diameter,--0-100开始直径
-         |       case when diameter_group=1 then  first_value(diameter) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x0_100_end_diameter, -- 0-100结束直径
-         |       case when diameter_group=1 then first_value(shoulder) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x0_100_start_shoulder,--0-100开始肩形
-         |       case when diameter_group=1 then  first_value(shoulder) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x0_100_end_shoulder, -- 0-100结束肩形
-         |       case when diameter_group=1 then first_value(crystallength) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x0_100_start_crystallength,--0-100开始晶体长度
-         |       case when diameter_group=1 then  first_value(crystallength) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x0_100_end_crystallength, -- 0-100结束晶体长度
+         |       case when diameter_group=1 then first_value(nowtime) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime)  else null end as x0_100_start_time,--0-100开始时间
+         |       case when diameter_group=1 then  first_value(nowtime) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime DESC) else null end as x0_100_end_time, -- 0-100结束时间
+         |       case when diameter_group=1 then first_value(avgslspeed) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime)  else null end as x0_100_start_avgslspeed,--0-100开始拉速
+         |       case when diameter_group=1 then  first_value(avgslspeed) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime DESC) else null end as x0_100_end_avgslspeed, -- 0-100结束拉速
+         |       case when diameter_group=1 then first_value(diameter) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime)  else null end as x0_100_start_diameter,--0-100开始直径
+         |       case when diameter_group=1 then  first_value(diameter) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime DESC) else null end as x0_100_end_diameter, -- 0-100结束直径
+         |       case when diameter_group=1 then first_value(shoulder) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime)  else null end as x0_100_start_shoulder,--0-100开始肩形
+         |       case when diameter_group=1 then  first_value(shoulder) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime DESC) else null end as x0_100_end_shoulder, -- 0-100结束肩形
          |
-         |       case when diameter_group=2 then first_value(nowtime) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x100_200_start_time,--100_200开始时间
-         |       case when diameter_group=2 then  first_value(nowtime) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x100_200_end_time, -- 100_200结束时间
-         |       case when diameter_group=2 then first_value(avgslspeed) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x100_200_start_avgslspeed,--100_200开始拉速
-         |       case when diameter_group=2 then  first_value(avgslspeed) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x100_200_end_avgslspeed, -- 100_200结束拉速
-         |       case when diameter_group=2 then first_value(diameter) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x100_200_start_diameter,--100_200开始直径
-         |       case when diameter_group=2 then  first_value(diameter) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x100_200_end_diameter, -- 100_200结束直径
-         |       case when diameter_group=2 then first_value(shoulder) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x100_200_start_shoulder,--100_200开始肩形
-         |       case when diameter_group=2 then  first_value(shoulder) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x100_200_end_shoulder, -- 100_200结束肩形
-         |       case when diameter_group=2 then first_value(crystallength) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x100_200_start_crystallength,--100_200开始晶体长度
-         |       case when diameter_group=2 then  first_value(crystallength) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x100_200_end_crystallength, -- 100_200结束晶体长度
+         |       case when diameter_group=2 then first_value(nowtime) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime)  else null end as x100_200_start_time,--100_200开始时间
+         |       case when diameter_group=2 then  first_value(nowtime) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime DESC) else null end as x100_200_end_time, -- 100_200结束时间
+         |       case when diameter_group=2 then first_value(avgslspeed) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime)  else null end as x100_200_start_avgslspeed,--100_200开始拉速
+         |       case when diameter_group=2 then  first_value(avgslspeed) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime DESC) else null end as x100_200_end_avgslspeed, -- 100_200结束拉速
+         |       case when diameter_group=2 then first_value(diameter) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime)  else null end as x100_200_start_diameter,--100_200开始直径
+         |       case when diameter_group=2 then  first_value(diameter) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime DESC) else null end as x100_200_end_diameter, -- 100_200结束直径
+         |       case when diameter_group=2 then first_value(shoulder) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime)  else null end as x100_200_start_shoulder,--100_200开始肩形
+         |       case when diameter_group=2 then  first_value(shoulder) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime DESC) else null end as x100_200_end_shoulder, -- 100_200结束肩形
          |
-         |       case when diameter_group=3 then first_value(nowtime) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x200_300_start_time,--200_300开始时间
-         |       case when diameter_group=3 then  first_value(nowtime) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x200_300_end_time, -- 200_300结束时间
-         |       case when diameter_group=3 then first_value(avgslspeed) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x200_300_start_avgslspeed,--200_300开始拉速
-         |       case when diameter_group=3 then  first_value(avgslspeed) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x200_300_end_avgslspeed, -- 200_300结束拉速
-         |       case when diameter_group=3 then first_value(diameter) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x200_300_start_diameter,--200_300开始直径
-         |       case when diameter_group=3 then  first_value(diameter) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x200_300_end_diameter, -- 200_300结束直径
-         |       case when diameter_group=3 then first_value(shoulder) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x200_300_start_shoulder,--200_300开始肩形
-         |       case when diameter_group=3 then  first_value(shoulder) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x200_300_end_shoulder, -- 200_300结束肩形
-         |       case when diameter_group=3 then first_value(crystallength) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime)  else null end as x200_300_start_crystallength,--200_300开始晶体长度
-         |       case when diameter_group=3 then  first_value(crystallength) over(partition by crystalid,basearea,BGROUP,stepno6,diameter_tag order by nowtime DESC) else null end as x200_300_end_crystallength -- 200_300结束晶体长度
-         |
+         |       case when diameter_group=3 then first_value(nowtime) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime)  else null end as x200_300_start_time,--200_300开始时间
+         |       case when diameter_group=3 then  first_value(nowtime) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime DESC) else null end as x200_300_end_time, -- 200_300结束时间
+         |       case when diameter_group=3 then first_value(avgslspeed) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime)  else null end as x200_300_start_avgslspeed,--200_300开始拉速
+         |       case when diameter_group=3 then  first_value(avgslspeed) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime DESC) else null end as x200_300_end_avgslspeed, -- 200_300结束拉速
+         |       case when diameter_group=3 then first_value(diameter) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime)  else null end as x200_300_start_diameter,--200_300开始直径
+         |       case when diameter_group=3 then  first_value(diameter) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime DESC) else null end as x200_300_end_diameter, -- 200_300结束直径
+         |       case when diameter_group=3 then first_value(shoulder) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime)  else null end as x200_300_start_shoulder,--200_300开始肩形
+         |       case when diameter_group=3 then  first_value(shoulder) over(partition by basearea, crystalid,BGROUP,fjgroup,diameter_tag order by nowtime DESC) else null end as x200_300_end_shoulder -- 200_300结束肩形
          |from
-         |(select *,
-         |sum(xdiameter_tag) over (partition by crystalid,basearea,BGROUP,stepno6 order by nowtime) as diameter_tag --  直径分组
-         |from
+         |(select
+         |*,
+         |       sum(xdiameter_tag) over (partition by basearea, crystalid,BGROUP,fjgroup order by nowtime) as diameter_tag --  直径分组
+         |       from
          |(select *,
          |       round(start_meltsurftemp-start_setmeltsurftemp,2) as  start_diff_surftemp, --放肩开始与目标的亮度偏差
          |       round((unix_timestamp(fj_end_time)-unix_timestamp(fj_start_time))/3600,1) as fj_duration, -- 放肩时长
@@ -292,51 +277,68 @@ object DJdataAnalyse {
          |       case when diameter_group=2 and lag_diameter_group=1 then 1 else 0  end as 100_200_start,
          |       case when diameter_group=2 and lead_diameter_group=3 then 1 else 0 end as 100_200_end,
          |       case when diameter_group=3 and lag_diameter_group=2 then 1 else 0 end as 200_300_start,
-         |       case when diameter_group=3 and lead_diameter_group is null then 1 else 0 end as 200_300_end,
-         |       case when diameter_group != lag_diameter_group then 1 else 0 end  as xdiameter_tag
-         |from
-         |(select *,
-         |       first_value(meltsurftemp) over (partition by crystalid,basearea,BGROUP,stepno6 order by nowtime)   as start_meltsurftemp, --放肩起始亮度
-         |       first_value(setmeltsurftemp) over (partition by crystalid,basearea,BGROUP,stepno6 order by nowtime)  as start_setmeltsurftemp, --放肩起始设定亮度
-         |       first_value(crystalweight) over (partition by crystalid,basearea,BGROUP,stepno6 order by nowtime ) as fj_start_crystalweight, --放肩起始重量
-         |       first_value(crystalweight) over (partition by crystalid,basearea,BGROUP,stepno6 order by nowtime DESC) as fj_end_crystalweight, --放肩结束重量
-         |
-         |       first_value(crystallength) over (partition by crystalid,basearea,BGROUP,stepno6 order by nowtime ) as fj_start_crystallength, --放肩起始长度
-         |       first_value(crystallength) over (partition by crystalid,basearea,BGROUP,stepno6 order by nowtime DESC) as fj_end_crystallength, --放肩结束长度
-         |
-         |       first_value(nowtime) over (partition by crystalid,basearea,BGROUP,stepno6 order by nowtime) as fj_start_time, --放肩开始时间
-         |       first_value(nowtime) over (partition by crystalid,basearea,BGROUP,stepno6 order by nowtime DESC) as fj_end_time, --放肩结束时间
-         |
-         |       round(avg(avgslspeed) over (partition by crystalid,basearea,BGROUP,stepno6),1) as avg_avgslspeed,--平均拉速
-         |       round(avg(diameter) over (partition by crystalid,basearea,BGROUP,stepno6),1) as  avg_diameter,--平均直径
-         |       round(avg(cruciblelift) over (partition by crystalid,basearea,BGROUP,stepno6),1) as avg_cruciblelift,--平均埚升
-         |       round(avg(meltlevel) over (partition by crystalid,basearea,BGROUP,stepno6),1) as avg_meltlevel,--平均液口距
-         |       round(avg(cruciblepos) over (partition by crystalid,basearea,BGROUP,stepno6),1) as avg_cruciblepos,--平均埚位
-         |       case when crystallength=0 then 0 else xshoulder end as shoulder,
-         |       lag(diameter_group) over (partition by crystalid,basearea,BGROUP,stepno6 order by nowtime) as lag_diameter_group,
-         |       lead(diameter_group) over (partition by crystalid,basearea,BGROUP,stepno6 order by nowtime) as lead_diameter_group
+         |        case when diameter_group=3 and lead_diameter_group is null then 1 else 0 end as 200_300_end,
+         |        case when diameter_group != lag_diameter_group then 1 else 0 end  as xdiameter_tag
          |       from
          |(select *,
-         |       lag(stepno6) over(partition by crystalid,basearea,BGROUP order by nowtime) as lag_stepno6,--上次放肩分组
-         |       round(diameter/crystallength,4) as  xshoulder, --肩形
+         |       max(case when isheadFJ=1 then meltsurftemp end ) over (partition by basearea, crystalid,BGROUP,fjgroup)   as start_meltsurftemp, --放肩起始亮度
+         |       max(case when isheadFJ=1 then setmeltsurftemp end ) over (partition by basearea, crystalid,BGROUP,fjgroup)  as start_setmeltsurftemp, --放肩起始设定亮度
+         |       max(case when isheadFJ=1 then crystalweight end ) over (partition by basearea, crystalid,BGROUP,fjgroup) as fj_start_crystalweight, --放肩起始重量
+         |       first_value(crystalweight) over (partition by basearea, crystalid,BGROUP,fjgroup order by nowtime desc) as fj_end_crystalweight, --放肩结束重量
+         |       min(nowtime) over (partition by basearea, crystalid,BGROUP,fjgroup) as fj_start_time, --放肩开始时间
+         |       max(nowtime) over (partition by basearea, crystalid,BGROUP,fjgroup) as fj_end_time, --放肩结束时间
+         |       round(avg(avgslspeed) over (partition by basearea, crystalid,BGROUP,fjgroup),1) as avg_avgslspeed,--平均拉速
+         |       round(avg(diameter) over (partition by basearea, crystalid,BGROUP,fjgroup),1) as  avg_diameter,--平均直径
+         |       round(avg(cruciblelift) over (partition by basearea, crystalid,BGROUP,fjgroup),1) as avg_cruciblelift,--平均埚升
+         |       round(avg(meltlevel) over (partition by basearea, crystalid,BGROUP,fjgroup),1) as avg_meltlevel,--平均液口距
+         |       round(avg(cruciblepos) over (partition by basearea, crystalid,BGROUP,fjgroup),1) as avg_cruciblepos,--平均埚位
+         |       case when crystallength=0 then 0 else xshoulder end as shoulder,
+         |       lag(diameter_group) over (partition by basearea, crystalid,BGROUP,fjgroup order by nowtime) as lag_diameter_group,
+         |       lead(diameter_group) over (partition by basearea, crystalid,BGROUP,fjgroup order by nowtime) as lead_diameter_group
+         |       from
+         |(select *,
+         |      round(diameter/crystallength,4) as  xshoulder, --肩形
+         |     sum(isheadFJ) over(partition by basearea, crystalid,BGROUP order by nowtime ) as fjgroup -- 晶编 + RCZ + 放肩
+         |     from
+         |(select
+         |       *,
+         |       case when  state=6 and last_state = 5  then 1 else 0 end as isheadFJ,
+         |       case when  state=6 and lead_state=5 then 1 else 0 end as is_fj_end
+         |from
+         |(select *,
+         |       lag(nowtime) over (partition by basearea, crystalid order by nowtime) last_optime, --上次操作时间
+         |       lead(nowtime) over (partition by basearea, crystalid order by nowtime) lead_optime, --下次操作时间
+         |       lag(state) over (partition by basearea, crystalid order by nowtime) last_state, --上次操作
+         |       lead(state) over (partition by basearea, crystalid order by nowtime) lead_state, --下次操作
+         |
          |       case when diameter>=0 and diameter<100 then 1 else 0 end as 0_100_group,
          |       case when diameter>=100 and diameter<=200 then 1 else 0 end as 100_200_group,
-         |
          |       case  when diameter>200 then 1 else 0  end as  200_300_group,
          |       case  when diameter>=0 and diameter<100 then 1
          |             when diameter>=100 and diameter<=200 then 2
          |             when diameter>200 then 3 end as diameter_group
          |       from bggroupSqlDF_view
-         |)ML)NL)OL
-         |         where (
+         |where state = 6 or state = 5
+         |    and(stepno6>0 or stepno5>0)
+         |    )ML
+         |    where state=6
+         |    )
+         |    NL)OL
+         |where fjgroup >=1  -- 去掉头部脏数据
+         |    )PL
+         |    )QL
+         |     where (
          |        0_100_start=1
          |        or 0_100_end=1
          |        or 100_200_start=1
          |        or 100_200_end=1
          |        or 200_300_start=1
-         |        or 200_300_end=1)
-         |    )PL)RL)SL)TL
-         |where rank_num=1
+         |        or 200_300_end=1
+         |        or isheadFJ =1
+         |        or  is_fj_end=1
+         |              )
+         |)RL)SL)TL)UL
+         |where isheadFJ=1
          |""".stripMargin
 
     val fjSqlDF=spark.sql(fjSql)
@@ -416,13 +418,13 @@ object DJdataAnalyse {
       ).withColumn("day_id", substring(col("nowtime"), 1, 11))
 
 
-    resultDF.show(20)
+    //resultDF.show(20)
     resultDF.printSchema()
 
     resultDF.createTempView("resultDF_view")
     spark.sql(
       """
-        |INSERT OVERWRITE TABLE test.dj_data_analyse partition(day_id)
+        |INSERT OVERWRITE TABLE test.dj_data_analyse4 partition(day_id)
         |SELECT * FROM resultDF_view
         |""".stripMargin)
     spark.stop()
