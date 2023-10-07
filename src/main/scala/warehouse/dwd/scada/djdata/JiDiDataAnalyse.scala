@@ -25,15 +25,15 @@ object JiDiDataAnalyse {
     // step1 基础rzc分组
     rzcGroup(stove)
     // step2 表一计算 二次加料氩气流量
-    agg_script_ar_flow
+    //agg_script_ar_flow
     // step3 表二计算 籽晶预热以及熔接位置
     agg_script_merged_feature
     // step4 表三计算
-    agg_temp_slope
+    //agg_temp_slope
     // step5 表四计算
-    agg_lower_he
+    //agg_lower_he
     // step6 表五计算
-    agg_cp_detail
+    //agg_cp_detail
 
     spark.stop()
 
@@ -44,18 +44,16 @@ object JiDiDataAnalyse {
   def rzcGroup(stove: String): Unit = {
     val ingot_result_sql =
       s"""
-         |SELECT
+         |    SELECT
          |        t.*,
          |        LAG(t.setbottomheater, 1) OVER(PARTITION BY t.basearea, t.crystalid ORDER BY t.nowtime) AS last_sbheater,
          |        LAG(t.setmainheater, 1) OVER(PARTITION BY t.basearea, t.crystalid ORDER BY t.nowtime) AS last_smheater,
-         |        CASE WHEN ((t.state > 4) AND (t.state <= 9)) THEN state ELSE 0 END AS fill_state
-         |    FROM ods_ingot_scada.djzk_app_result t where
-         |    --left(basearea,2)='QJ'
-         |    -- and  nowtime >= '2023-01-01' and  nowtime <= '2023-08-10'
-         |    left(basearea,2)='QJ'
-         |     and  day_id >= '2023-01-01' and  day_id <= '2023-08-10'
-         |    and left (SUBSTR(BASEAREA, -3),1) in ('E','F','G','H','A','B','C','D')
-         |    --and  CRYSTALID IN ('ZQS31G5001', 'ZQS2CG5002','ZQS37C8901')
+         |        CASE WHEN ((t.state >= 4) AND (t.state < 9)) THEN state ELSE 0 END AS fill_state
+         |    FROM ods_ingot_scada.djzk_app_result t
+         |    -- WHERE t.BASEAREA IN ('QJ_G50');
+         |    WHERE left(basearea,2)='QJ'
+         |    and left (SUBSTR(BASEAREA, -3),1) in ('A','B','C','D')
+         |    and  day_id >= '2023-01-01' and  day_id <= '2023-09-20'
          |""".stripMargin
 
     val ingot_result_sql_DF = spark.sql(ingot_result_sql)
@@ -65,12 +63,13 @@ object JiDiDataAnalyse {
     val ods_table_sql =
       """
         |SELECT t1.*,
-        |       SUM(t1.XISOPENBOT) OVER(PARTITION BY t1.basearea, t1.CRYSTALID ORDER BY t1.NOWTIME) AS XBGROUP
-        |        FROM (
-        |          SELECT t0.*,
-        |                 SUBSTR(t0.BASEAREA, -3) AS puller,
-        |                 CASE WHEN ((t0.last_sbheater + t0.last_smheater < 130) AND (t0.setbottomheater + t0.setmainheater >= 130)) THEN 1 ELSE 0 END AS xisopenbot
-        |          FROM ingot_result t0) t1
+        |           SUM(t1.XISOPENBOT) OVER(PARTITION BY t1.basearea, t1.CRYSTALID ORDER BY t1.NOWTIME) AS XBGROUP
+        |    FROM (
+        |      SELECT t0.*,
+        |             SUBSTR(t0.BASEAREA, -3) AS puller,
+        |             CASE WHEN ((t0.last_sbheater + t0.last_smheater < 130) AND (t0.setbottomheater + t0.setmainheater >= 130)) THEN 1 ELSE 0 END AS xisopenbot
+        |      FROM ingot_result t0
+        |    ) t1
         |""".stripMargin
 
     val ods_table_sql_DF = spark.sql(ods_table_sql)
@@ -79,16 +78,32 @@ object JiDiDataAnalyse {
 
     val rcz_table_sql =
       """
-        | SELECT t1.*,
-        |       SUM(CASE WHEN t1.MAXSTATE IN (4, 5, 6, 7, 8, 9) THEN t1.xisopenbot ELSE 0 END)
-        |           OVER (PARTITION BY t1.basearea, t1.CRYSTALID ORDER BY t1.nowtime) AS BGROUP
-        |      FROM (
-        |        SELECT t0.*,
-        |               MAX(t0.fill_state) OVER (PARTITION BY t0.basearea, t0.CRYSTALID, t0.XBGROUP) AS MAXSTATE
-        |        FROM ods_table t0 ) t1
+        |             select t11.* from (SELECT *,
+        |                                       SUM(CASE
+        |                                               WHEN MAXSTATE  IN (4, 5, 6, 7, 8, 9) AND LAG_MAXSTATE =0 and  LAG2_MAXSTATE IN (4, 5, 6, 7, 8, 9)
+        |                                                THEN 0 ELSE xisopenbot END)
+        |                                           OVER (PARTITION BY basearea, CRYSTALID ORDER BY nowtime) AS BGROUP
+        |                                FROM
+        |                                     (SELECT *,
+        |                                              LAG(XLAG_MAXSTATE, 1) OVER(PARTITION BY basearea, CRYSTALID ORDER BY nowtime) AS LAG2_MAXSTATE
+        |                                      from
+        |                                           (SELECT *,
+        |                                                MAX(LAG_MAXSTATE) OVER (PARTITION BY basearea, CRYSTALID, XBGROUP) AS XLAG_MAXSTATE
+        |                                           FROM (SELECT *,
+        |                                              LAG(MAXSTATE, 1) OVER(PARTITION BY t0.basearea, t0.CRYSTALID ORDER BY t0.nowtime) AS LAG_MAXSTATE
+        |                                             FROM (
+        |                                                SELECT *,
+        |                                                       MAX(fill_state) OVER (PARTITION BY basearea, CRYSTALID, XBGROUP) AS MAXSTATE
+        |                                                FROM ods_table
+        |                                                 ) t0
+        |                                            ) t1
+        |                                         )t
+        |                                     )A
+        |
+        |                 )t11 where t11.BGROUP>0
         |""".stripMargin
 
-    val rcz_table_sql_DF = spark.sql(rcz_table_sql)
+    val rcz_table_sql_DF = spark.sql(rcz_table_sql).drop("LAG2_MAXSTATE","XLAG_MAXSTATE","LAG_MAXSTATE")
     //todo 最后注释掉
     println("rcz分组 完成")
     //rcz_table_sql_DF.show(10)
@@ -126,7 +141,7 @@ object JiDiDataAnalyse {
 
     val ar_flow_view_sql =
       """
-        |INSERT INTO TABLE test.agg_script_ar_flow_prd partition(day)
+        |INSERT OVERWRITE TABLE test.agg_script_ar_flow_prd partition(day)
         |SELECT * FROM ar_flow_view
         |""".stripMargin
     spark.sql(ar_flow_view_sql)
@@ -324,83 +339,20 @@ object JiDiDataAnalyse {
 
     val MERGED_FEATURE_sql =
       """
-        |    SELECT COALESCE(t0.CRYSTALID, t1.CRYSTALID, t2.CRYSTALID, t3.CRYSTALID) AS CRYSTALID,
-        |           COALESCE(t0.BGROUP, t1.BGROUP, t2.BGROUP, t3.BGROUP) AS BGROUP,
-        |           t0.NOWTIME AS CR_TIME,
-        |           t0.MELTSURFTEMP AS CR_MELTSURFTEMP,
-        |           t0.SETMELTSURFTEMP AS CR_SETMELTSURFTEMP,
-        |           t0.CRUCIBLEROTATION AS CR_CRUCIBLEROTATION,
-        |           t0.LAST_CR AS CR_LAST_CR,
-        |           t1.NOWTIME AS CP_TIME,
-        |           t1.CRUCIBLEPOS AS CP_CRUCIBLEPOS,
-        |           t1.LAST_CP AS CP_LAST_CP,
-        |           t1.DIFF_CP AS CP_DIFF_CP,
-        |           t2.NOWTIME AS DT_TIME,
-        |           t2.SETMAINHEATER AS DT_SETMAINHEATER,
-        |           t2.SETMELTSURFTEMP AS DT_SETMELTSURFTEMP,
-        |           t3.PHASE1_DURATION AS MELT_PHASE1_DURATION,
-        |           t3.PHASE2_DURATION AS MELT_PHASE2_DURATION,
-        |           t3.PHASE3_DURATION AS MELT_PHASE3_DURATION,
-        |           t3.PHASE4_DURATION AS MELT_PHASE4_DURATION,
-        |           t3.PHASE5_DURATION AS MELT_PHASE5_DURATION,
-        |           t3.PHASE1_MAX_MELTSURFTEMP AS MELT_PHASE1_MAX_MELTSURFTEMP,
-        |           t3.PHASE2_MAX_MELTSURFTEMP AS MELT_PHASE2_MAX_MELTSURFTEMP,
-        |           t3.PHASE3_MAX_MELTSURFTEMP AS MELT_PHASE3_MAX_MELTSURFTEMP,
-        |           t3.PHASE4_MAX_MELTSURFTEMP AS MELT_PHASE4_MAX_MELTSURFTEMP,
-        |           t3.PHASE5_MAX_MELTSURFTEMP AS MELT_PHASE5_MAX_MELTSURFTEMP,
-        |           t3.PHASE1_PHASE_POS AS MELT_PHASE1_PHASE_POS,
-        |           t3.PHASE2_PHASE_POS AS MELT_PHASE2_PHASE_POS,
-        |           t3.PHASE3_PHASE_POS AS MELT_PHASE3_PHASE_POS,
-        |           t3.PHASE4_PHASE_POS AS MELT_PHASE4_PHASE_POS,
-        |           t3.PHASE5_PHASE_POS AS MELT_PHASE5_PHASE_POS
-        |    FROM CR_VIEW t0  --准备调温打埚转
-        |    left JOIN
-        |    CP_VIEW t1 --准备调温放埚位
-        |    ON t0.CRYSTALID = t1.CRYSTALID AND t0.BGROUP = t1.BGROUP
-        |   left JOIN
-        |--     (SELECT *
-        |--         FROM (
-        |--         SELECT CRYSTALId, BGROUP, CSPOS_GROUP, DURATION, MAX_MELTSURFTEMP, PHASE_POS
-        |--             FROM melt_phase_view
-        |--             )
-        |--             PIVOT (
-        |--               MAX(DURATION) AS DURATION, MAX(MAX_MELTSURFTEMP) AS MAX_MELTSURFTEMP, MAX(PHASE_POS) AS PHASE_POS
-        |--               FOR CSPOS_GROUP IN ('0-200' AS PHASE1, '200-400' AS PHASE2, '400-600' AS PHASE3, '600-800' AS PHASE4, 'others' AS PHASE5)
-        |--                 )
-        |--     ) t3
-        |    (SELECT CRYSTALId,
-        |            BGROUP,
-        |            MAX(CASE WHEN CSPOS_GROUP = '0-200' THEN DURATION END) AS           PHASE1_DURATION,
-        |            MAX(CASE WHEN CSPOS_GROUP = '0-200' THEN MAX_MELTSURFTEMP END) AS   PHASE1_MAX_MELTSURFTEMP,
-        |            MAX(CASE WHEN CSPOS_GROUP = '0-200' THEN PHASE_POS END) AS          PHASE1_PHASE_POS,
-        |            MAX(CASE WHEN CSPOS_GROUP = '200-400' THEN DURATION END) AS         PHASE2_DURATION,
-        |            MAX(CASE WHEN CSPOS_GROUP = '200-400' THEN MAX_MELTSURFTEMP END) AS PHASE2_MAX_MELTSURFTEMP,
-        |            MAX(CASE WHEN CSPOS_GROUP = '200-400' THEN PHASE_POS END) AS        PHASE2_PHASE_POS,
-        |            MAX(CASE WHEN CSPOS_GROUP = '400-600' THEN DURATION END) AS         PHASE3_DURATION,
-        |            MAX(CASE WHEN CSPOS_GROUP = '400-600' THEN MAX_MELTSURFTEMP END) AS PHASE3_MAX_MELTSURFTEMP,
-        |            MAX(CASE WHEN CSPOS_GROUP = '400-600' THEN PHASE_POS END) AS        PHASE3_PHASE_POS,
-        |            MAX(CASE WHEN CSPOS_GROUP = '600-800' THEN DURATION END) AS         PHASE4_DURATION,
-        |            MAX(CASE WHEN CSPOS_GROUP = '600-800' THEN MAX_MELTSURFTEMP END) AS PHASE4_MAX_MELTSURFTEMP,
-        |            MAX(CASE WHEN CSPOS_GROUP = '600-800' THEN PHASE_POS END) AS        PHASE4_PHASE_POS,
-        |            MAX(CASE
-        |                    WHEN CSPOS_GROUP NOT IN ('0-200', '200-400', '400-600', '600-800')
-        |                        THEN DURATION END) AS                                   PHASE5_DURATION,
-        |            MAX(CASE
-        |                    WHEN CSPOS_GROUP NOT IN ('0-200', '200-400', '400-600', '600-800')
-        |                        THEN MAX_MELTSURFTEMP END) AS                           PHASE5_MAX_MELTSURFTEMP,
-        |            MAX(CASE
-        |                    WHEN CSPOS_GROUP NOT IN ('0-200', '200-400', '400-600', '600-800')
-        |                        THEN PHASE_POS END) AS                                  PHASE5_PHASE_POS
-        |     FROM (
-        |              SELECT CRYSTALId, BGROUP, CSPOS_GROUP, DURATION, MAX_MELTSURFTEMP, PHASE_POS
-        |              FROM melt_phase_view
-        |          ) subquery
-        |     GROUP BY CRYSTALId, BGROUP
-        |    ) t3  --准备调温及调温，籽晶预热及调温位置
-        |    ON t0.CRYSTALID = t3.CRYSTALID AND t0.BGROUP = t3.BGROUP
-        |    left JOIN
-        |    DUAL_TARGET_VIEW t2 --引晶双目标
-        |    ON t0.CRYSTALID = t2.CRYSTALID AND t0.BGROUP = t2.BGROUP
+        |SELECT COALESCE(t0.CRYSTALID, t2.CRYSTALID) AS CRYSTALID,
+        |       COALESCE(t0.BGROUP, t2.BGROUP) AS BGROUP,
+        |       t0.NOWTIME AS CR_TIME,
+        |       t0.MELTSURFTEMP AS CR_MELTSURFTEMP,
+        |       t0.SETMELTSURFTEMP AS CR_SETMELTSURFTEMP,
+        |       t0.CRUCIBLEROTATION AS CR_CRUCIBLEROTATION,
+        |       t0.LAST_CR AS CR_LAST_CR,
+        |       t2.NOWTIME AS DT_TIME,
+        |       t2.SETMAINHEATER AS DT_SETMAINHEATER,
+        |       t2.SETMELTSURFTEMP AS DT_SETMELTSURFTEMP
+        |FROM CR_VIEW t0
+        |FULL JOIN
+        |DUAL_TARGET_VIEW t2
+        |ON t0.CRYSTALID = t2.CRYSTALID AND t0.BGROUP = t2.BGROUP
         |""".stripMargin
 
     val MERGED_FEATURE_sql_DF = spark.sql(MERGED_FEATURE_sql)
@@ -412,7 +364,7 @@ object JiDiDataAnalyse {
 
     val MERGED_FEATURE_RES_sql =
       """
-        |INSERT INTO TABLE test.agg_script_merged_feature_prd
+        |INSERT into TABLE test.agg_script_merged_feature_prd_new
         |SELECT * FROM MERGED_FEATURE
         |""".stripMargin
     spark.sql(MERGED_FEATURE_RES_sql)
@@ -636,7 +588,7 @@ object JiDiDataAnalyse {
 
     val MERGED_FEATURE_RES_sql =
       """
-        |INSERT INTO TABLE test.agg_temp_slope_prd
+        |INSERT OVERWRITE TABLE test.agg_temp_slope_prd
         |SELECT * FROM result_df_sql_DF_view
         |""".stripMargin
     spark.sql(MERGED_FEATURE_RES_sql)
@@ -663,7 +615,7 @@ object JiDiDataAnalyse {
          |""".stripMargin
 
     val rcz_with_tw_prep_phase_sql_DF = spark.sql(rcz_with_tw_prep_phase_sql)
-    rcz_with_tw_prep_phase_sql_DF.createTempView("rcz_with_tw_prep_phase")
+    rcz_with_tw_prep_phase_sql_DF.createTempView("rcz_with_tw_prep_phase_agg_lower_he")
 
     val agg_lower_he_res_sql =
       """
@@ -691,7 +643,7 @@ object JiDiDataAnalyse {
         |                   when HEATEXCHANGERPOS>400 then '400+'
         |               end hepos_group,
         |               a.*
-        |        FROM rcz_with_tw_prep_phase a
+        |        FROM rcz_with_tw_prep_phase_agg_lower_he a
         |        WHERE STATE IN (24)
         |        ) a
         |    WHERE a.posdiff>=0 AND NUM_TW_PREP_PHASE = 1
@@ -704,10 +656,11 @@ object JiDiDataAnalyse {
 
     val insertSql =
       """
-        |INSERT INTO TABLE test.agg_lower_he
+        |INSERT OVERWRITE TABLE test.agg_lower_he
         |SELECT * FROM agg_lower_he_res_sql_DF_view
         |""".stripMargin
     spark.sql(insertSql)
+    println("agg_lower_he 入库完成")
   }
 
 
@@ -726,7 +679,7 @@ object JiDiDataAnalyse {
 
     val rcz_with_tw_prep_phase_sql_DF= spark.sql(rcz_with_tw_prep_phase_sql)
 
-    rcz_with_tw_prep_phase_sql_DF.createTempView("rcz_with_tw_prep_phase")
+    rcz_with_tw_prep_phase_sql_DF.createTempView("rcz_with_tw_prep_phase_agg_cp_detail")
 
     val res_sql=
       """
@@ -744,7 +697,7 @@ object JiDiDataAnalyse {
         |    FROM (SELECT t0.*,
         |                 LAG(t0.CRUCIBLEPOS, 1) OVER (PARTITION BY t0.BASEAREA, t0.CRYSTALID, t0.BGROUP, t0.NUM_TW_PREP_PHASE ORDER BY t0.NOWTIME) AS LAST_CP,
         |                 (t0.CRUCIBLEPOS - LAG(t0.CRUCIBLEPOS, 1) OVER (PARTITION BY t0.BASEAREA, t0.CRYSTALID, t0.BGROUP, t0.NUM_TW_PREP_PHASE ORDER BY t0.NOWTIME)) AS DIFF_CP
-        |          FROM rcz_with_tw_prep_phase t0 WHERE t0.STATE IN (24)) t1
+        |          FROM rcz_with_tw_prep_phase_agg_cp_detail t0 WHERE t0.STATE IN (24)) t1
         |    WHERE t1.DIFF_CP >= 3 OR t1.DIFF_CP <= -3) t2
         |   WHERE t2.rk = 1
         |""".stripMargin
@@ -757,5 +710,8 @@ object JiDiDataAnalyse {
         |SELECT * FROM agg_cp_detail_res
         |""".stripMargin
     spark.sql(insertSql)
+    println("agg_cp_detail 入库完成")
+
+
   }
 }
